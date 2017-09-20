@@ -95,7 +95,7 @@ class Place:
                         self.saving_to_neo4j(val)
 
                         """ saving to json file """
-                        # self.saving_to_json_file(val)
+                        self.saving_to_json_file(val)
 
                         # execute time total
                         time_total_execution = time.time() - start_time
