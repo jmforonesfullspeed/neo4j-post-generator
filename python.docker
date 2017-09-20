@@ -1,0 +1,16 @@
+FROM python:3
+
+WORKDIR ./
+
+RUN pip install --no-cache-dir -r ./requirements.txt
+
+CMD [ "python", "./concurrent_faker_post.py" ]
+# or (if you need to use Python 2):
+
+FROM python:2
+
+WORKDIR ./
+
+RUN pip install --no-cache-dir -r ./requirements.txt
+
+CMD [ "python", "./concurrent_faker_post.py" ]

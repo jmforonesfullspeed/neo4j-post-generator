@@ -1,0 +1,60 @@
+version: '2'
+services:
+    python:
+        restart: always
+        build:
+            context: ./
+            dockerfile: web.docker
+        volumes:
+          - ./www:/var/www
+        ports:
+          - "80:80"
+        links:
+          - app
+    app:
+        restart: always
+        build:
+            context: ./
+            dockerfile: app.docker
+        volumes:
+          - ./www:/var/www
+        ports:
+          - "8000:8000"
+        depends_on:
+          - neo4j
+        links:
+          - neo4j
+
+    neo4j: #https://github.com/sasikumar-sugumar/docker-compose-neo4j/blob/master/docker-compose.yml
+        restart: always
+        image: neo4j:latest # pull the latest image
+        environment:
+          - NEO4J_AUTH=neo4j/fullspeed # none # configure the instance with custom username/password
+          - NEO4J_HEAP_MEMORY=2048 # configure the heap memory
+          - NEO4J_CACHE_MEMORY=1G # configure the cache memory
+        cap_add:
+          - SYS_RESOURCE
+          - NET_ADMIN
+          - SYS_ADMIN
+        volumes:
+          - ./db/dbms:/data/dbms # provision the volumes
+
+        ports:
+          - "7474:7474" # expose the port for the console ui
+          - "7687:7687" # if disabled websocket error
+          - "7473:7473"
+        command: neo4j
+
+        links:
+          - mysql
+
+    mysql:
+        restart: always
+        image: mysql:latest
+        volumes:
+            - ./mysql:/var/lib/mysql
+        environment:
+            - "MYSQL_ROOT_PASSWORD=admin"
+            - "MYSQL_DATABASE=sns"
+        ports:
+            - "3306:3306"
