@@ -1,5 +1,7 @@
 import sys
 import datetime
+
+import pytz
 from faker import Faker
 from py2neo import Node, Relationship, Graph
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,7 +12,7 @@ class RandomPost:
     __fake = Faker()
     graph = None
 
-    def __init__(self, host="35.200.1.162", username="neo4j", password="fullspeed", port="7474"):
+    def __init__(self, host="localhost", username="neo4j", password="fullspeed", port="7474"):
         self.graph = Graph("http://{}:{}@{}:{}/db/data/".format(username, password, host, port))
 
     def get_random_user(self):
@@ -21,29 +23,29 @@ class RandomPost:
 
     def get_random_place(self):
         """ cypher query on random place based on location country (Japan, Philippines and Taiwan) return 1 """
-        return self.graph.data("MATCH (LocationNode:LocationNode)-[:HAS_PLACE]->(PlaceNode:PlaceNode) "
-                               "WITH LocationNode, PlaceNode, rand() AS randomId "
-                               "WHERE LocationNode.country='Japan'  OR LocationNode.country='Philippines' "
-                               "OR LocationNode.country='Taiwan' "
-                               "RETURN ID(LocationNode) AS locationId, ID(PlaceNode) AS placeId, "
-                               "LocationNode, PlaceNode ORDER BY randomId LIMIT 1").pop()
+        return self.graph.data("MATCH (Locations:Locations)-[:HAS_PLACE]->(Places:Places) "
+                               "WITH Locations, Places, rand() AS randomId "
+                               "WHERE Locations.country='Japan'  OR Locations.country='Philippines' "
+                               "OR Locations.country='Taiwan' "
+                               "RETURN ID(Locations) AS locationId, ID(Places) AS placeId, "
+                               "Locations, Places ORDER BY randomId LIMIT 1").pop()
 
     def generate(self, place_node, user_found, worker_id):
         graph = self.graph
         print("Worker {} started".format(worker_id))
         """ set the current date without microsecond because it's not acceptable to laravel datetime format """
-        date = str(datetime.datetime.today().replace(microsecond=0))
+        date = datetime.utcnow().replace(tzinfo=pytz.utc)
 
         """ create dummy Post node object """
-        post_node = Node("PostNode", caption=self.__fake.text(), created_at=date, updated_at=date)
+        post_node = Node("Posts", caption=self.__fake.text(), created_at=date, updated_at=date)
 
         """ create 3 relationships between post node object to the usernode as AUTHOR
             place node to post node as HAS_POST
             post node to place node as LOCATED_AT
         """
-        rel1 = Relationship(post_node, "AUTHOR", user_found["UserNode"], created_at=date, updated_at=date)
-        rel2 = Relationship(place_node["PlaceNode"], "HAS_POST", post_node, created_at=date, updated_at=date)
-        rel3 = Relationship(post_node, "LOCATED_AT", place_node["PlaceNode"], created_at=date, updated_at=date)
+        rel1 = Relationship(post_node, "AUTHOR", user_found["Users"], created_at=date, updated_at=date)
+        rel2 = Relationship(place_node["Places"], "HAS_POST", post_node, created_at=date, updated_at=date)
+        rel3 = Relationship(post_node, "LOCATED_AT", place_node["Places"], created_at=date, updated_at=date)
 
         """ save the created objects to neo4j graph """
         graph.create(post_node)
@@ -128,4 +130,4 @@ if __name__ == '__main__':
     """ set recursionlimit for infinite recursion function """
     sys.setrecursionlimit(1000)
     random_post = RandomPost()
-    main(329)
+    main(1)

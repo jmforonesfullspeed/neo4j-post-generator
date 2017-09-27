@@ -1,3 +1,4 @@
+import pytz
 import requests
 import json
 import datetime
@@ -5,6 +6,27 @@ import time
 import os
 import sys
 from py2neo import Node, Relationship, Graph
+from neomodel import (config, StructuredNode, StringProperty, JSONProperty, ArrayProperty, IntegerProperty, DateTimeProperty, db)
+
+host = "localhost"
+port = "7687"
+username = "neo4j"
+password = "fullspeed"
+config.DATABASE_URL = "bolt://{}:{}@{}:{}".format(username, password, host, port)
+
+
+class Places(StructuredNode):
+    reference = StringProperty(required=True)
+    types = ArrayProperty(default=None)
+    formatted_address = StringProperty(required=True)
+    opening_hours = JSONProperty(required=False)
+    rating = IntegerProperty(required=False)
+    name = StringProperty(required=True)
+    photos = JSONProperty(required=True)
+    place_id = StringProperty(required=True)
+    created_at = DateTimeProperty(default_now=True)
+    updated_at = DateTimeProperty(default_now=True)
+    deleted_at = DateTimeProperty(default_now=False)
 
 
 class Place:
@@ -18,8 +40,8 @@ class Place:
     filename = None
     next_page_token = None
     __result = []
-    __PlaceNodeLabel = "PlaceNode"
-    __LocationNodeLabel = "LocationNode"
+    __PlaceNodeLabel = "Places"
+    __LocationNodeLabel = "Locations"
     type_index = 0
     place_types = ["country", "locality", "political", "accounting", "airport", "amusement_park", "aquarium",
                    "art_gallery", "atm", "bakery", "bank", "bar", "beauty_salon", "bicycle_store", "book_store",
@@ -95,7 +117,7 @@ class Place:
                         self.saving_to_neo4j(val)
 
                         """ saving to json file """
-                        self.saving_to_json_file(val)
+                        # self.saving_to_json_file(val)
 
                         # execute time total
                         time_total_execution = time.time() - start_time
@@ -132,7 +154,7 @@ class Place:
     def saving_to_neo4j(self, val):
         if secure_graph.find_one(self.__PlaceNodeLabel, "name", val["name"]) is None:
             print('{} not found in graph! saving...'.format(val["name"]))
-            date = str(datetime.datetime.today().replace(microsecond=0))
+            date = str(datetime.datetime.utcnow().replace(tzinfo=pytz.utc))
             place_node = Node(self.__PlaceNodeLabel,
                               name=val["name"],
                               place_id=val["place_id"],
@@ -231,7 +253,7 @@ class Command:
 
 if __name__ == '__main__':
 
-    secure_graph = Graph("http://neo4j:fullspeed@35.200.1.162:7474/db/data/")
+    secure_graph = Graph("http://{}:{}@{}:{}/db/data/".format(username, password, host, port))
     """timerecursionlimit is for opening , comparing, request execution adjustment
     """
     sys.setrecursionlimit(10000)
@@ -241,4 +263,4 @@ if __name__ == '__main__':
     location = place_data["results"][0]["geometry"]["location"]
     Place(query=place_data["results"][0]["name"], country=place_data["results"][0]["name"],
           lat=location["lat"], lng=location["lng"])
-    print("Google Place API Successfully generated!");
+    print("Google Place API Successfully generated!")
