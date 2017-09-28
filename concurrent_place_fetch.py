@@ -1,32 +1,47 @@
-import pytz
 import requests
 import json
-import datetime
 import time
 import os
 import sys
 from py2neo import Node, Relationship, Graph
-from neomodel import (config, StructuredNode, StringProperty, JSONProperty, ArrayProperty, IntegerProperty, DateTimeProperty, db)
+from neomodel import (config, StructuredNode, UniqueIdProperty, StructuredRel, RelationshipTo, StringProperty, JSONProperty, ArrayProperty, FloatProperty, IntegerProperty, DateTimeProperty, db)
 
 host = "localhost"
-port = "7687"
 username = "neo4j"
 password = "fullspeed"
-config.DATABASE_URL = "bolt://{}:{}@{}:{}".format(username, password, host, port)
+
+
+class LocatedAtRelationship(StructuredRel):
+    name = StringProperty(default="LOCATED_AT")
+    created_at = DateTimeProperty(default_now=True)
+    updated_at = DateTimeProperty(default_now=True)
+
+
+class Locations(StructuredNode):
+    uid = UniqueIdProperty()
+    country = StringProperty(required=True)
+    latitude = FloatProperty(required=True)
+    longitude = FloatProperty(required=True)
+    viewport = JSONProperty(required=False)
+    created_at = DateTimeProperty(default_now=True)
+    updated_at = DateTimeProperty(default_now=True)
+    deleted_at = DateTimeProperty(required=False, default=None)
 
 
 class Places(StructuredNode):
+    uid = UniqueIdProperty()
+    name = StringProperty(required=True)
     reference = StringProperty(required=True)
     types = ArrayProperty(default=None)
     formatted_address = StringProperty(required=True)
     opening_hours = JSONProperty(required=False)
     rating = IntegerProperty(required=False)
-    name = StringProperty(required=True)
-    photos = JSONProperty(required=True)
+    photos = JSONProperty(required=False)
     place_id = StringProperty(required=True)
     created_at = DateTimeProperty(default_now=True)
     updated_at = DateTimeProperty(default_now=True)
     deleted_at = DateTimeProperty(default_now=False)
+    locations = RelationshipTo('Locations', 'LOCATED_AT', model=LocatedAtRelationship)
 
 
 class Place:
@@ -154,41 +169,65 @@ class Place:
     def saving_to_neo4j(self, val):
         if secure_graph.find_one(self.__PlaceNodeLabel, "name", val["name"]) is None:
             print('{} not found in graph! saving...'.format(val["name"]))
-            date = str(datetime.datetime.utcnow().replace(tzinfo=pytz.utc))
-            place_node = Node(self.__PlaceNodeLabel,
-                              name=val["name"],
-                              place_id=val["place_id"],
-                              reference=val["reference"],
-                              types=val["types"],
-                              opening_hours=json.dumps(
-                                  val["opening_hours"]) if "opening_hours" in val else None,
-                              formatted_address=val["formatted_address"],
-                              rating=val["rating"] if "rating" in val else 0,
-                              photos=json.dumps(val["photos"]) if "photos" in val else None,
-                              created_at=date,
-                              updated_at=date)
+            # """ py2neo """
+            # place_node = Node(self.__PlaceNodeLabel,
+            #                   name=val["name"],
+            #                   place_id=val["place_id"],
+            #                   reference=val["reference"],
+            #                   types=val["types"],
+            #                   opening_hours=json.dumps(
+            #                       val["opening_hours"]) if "opening_hours" in val else None,
+            #                   formatted_address=val["formatted_address"],
+            #                   rating=val["rating"] if "rating" in val else 0,
+            #                   photos=json.dumps(val["photos"]) if "photos" in val else None,
+            #                   created_at=date,
+            #                   updated_at=date)
+            #
+            # """since per location is unique per place. so the validation will be by place name only
+            # """
+            # """ py2neo"""
+            # location_node = Node(self.__LocationNodeLabel,
+            #                      country=self.country,
+            #                      latitude=val["geometry"]["location"]["lat"],
+            #                      longitude=val["geometry"]["location"]["lng"],
+            #                      viewport=json.dumps(val["geometry"]["viewport"]),
+            #                      created_at=date,
+            #                      updated_at=date)
+            #
+            # """ create relationships between place and location node"""
+            # relationship_place_node = Relationship(place_node, "LOCATED_AT", location_node, created_at=date, updated_at=date)
+            #
+            # """ saving place and location node """
+            # secure_graph.create(place_node)
+            # secure_graph.create(location_node)
+            # """ saving place and location relationship """
+            # secure_graph.create(relationship_place_node)
 
-            """since per location is unique per place. so the validation will be by place name only
-            """
-            location_node = Node(self.__LocationNodeLabel,
-                                 country=self.country,
-                                 latitude=val["geometry"]["location"]["lat"],
-                                 longitude=val["geometry"]["location"]["lng"],
-                                 viewport=json.dumps(val["geometry"]["viewport"]),
-                                 created_at=date,
-                                 updated_at=date)
+            """ neomodel """
 
-            """ create relationships between place and location node"""
-            relationship_place_node = Relationship(place_node, "LOCATED_AT", location_node, created_at=date, updated_at=date)
-            relationship_location_node = Relationship(location_node, "HAS_PLACE", place_node, created_at=date, updated_at=date)
+            places_result = Places(
+                name=val["name"],
+                reference=val["reference"],
+                types=val["types"],
+                formatted_address=val["formatted_address"],
+                opening_hours=val["opening_hours"] if "opening_hours" in val else None,
+                rating=val["rating"] if "rating" in val else 0,
+                photos=val["photos"] if "photos" in val else None,
+                place_id=val["place_id"]
+            ).save()
 
-            """ saving place and location node """
-            secure_graph.create(place_node)
-            secure_graph.create(location_node)
-            """ saving place and location relationship """
-            secure_graph.create(relationship_place_node)
-            secure_graph.create(relationship_location_node)
+            locations_result = Locations(
+                country=self.country,
+                latitude=val["geometry"]["location"]["lat"],
+                longitude=val["geometry"]["location"]["lng"],
+                viewport=val["geometry"]["viewport"]
+            ).save()
+
+            places_result.locations.connect(locations_result)
+            places_result.save()
+
             print("Successfully saved!......")
+
         else:
             print("{} already exist! skipping...".format(val["name"]))
             pass
@@ -252,8 +291,8 @@ class Command:
             return country_data
 
 if __name__ == '__main__':
-
-    secure_graph = Graph("http://{}:{}@{}:{}/db/data/".format(username, password, host, port))
+    config.DATABASE_URL = "bolt://{}:{}@{}:7687".format(username, password, host)
+    secure_graph = Graph("http://{}:{}@{}:7474/db/data/".format(username, password, host))
     """timerecursionlimit is for opening , comparing, request execution adjustment
     """
     sys.setrecursionlimit(10000)
