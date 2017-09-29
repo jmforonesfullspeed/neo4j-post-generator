@@ -1,0 +1,27 @@
+
+#   A basic travis.yml
+#
+#
+#   Replace the following variables in the code:
+# *
+# * jmforonesfullspeed, Ehmz
+# * https://github.com/FullSpeedInc/flipmap_api
+
+language: python
+
+python:
+  - 2.7
+  - 3.6
+
+services: neo4j
+
+install:
+  - pip install -r requirements.txt
+  - pip install django==$DJANGO --quiet
+  - pip install psycopg2 --quiet
+
+#before_script:
+#  - psql -c "CREATE DATABASE mydb;" -U postgres // example command for database initialization
+
+script:
+  - python concurrent_faker_post.py
